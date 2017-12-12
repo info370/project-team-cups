@@ -1,0 +1,632 @@
+---
+title: "Technical Description"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+if(!require(mlbench)){install.packages("mlbench"); require(mlbench)} 
+if(!require(tidyverse)){install.packages("tidyverse"); library(tidyverse)} 
+if(!require(modelr)){install.packages("modelr"); library(modelr)} 
+if(!require(ModelMetrics)){install.packages("ModelMetrics"); require(ModelMetrics)}
+if(!require(recipes)){install.packages("recipes"); require(recipes)}
+if(!require(DEoptimR)){install.packages("DEoptimR"); require(DEoptimR)}
+if(!require(caret)){install.packages("caret"); require(caret)}
+if(!require(dplyr)){install.packages("dplyr"); require(dplyr)}
+if(!require(gam)){install.packages("gam"); require(gam)} 
+if(!require(prophet)){install.packages("prophet"); require(prophet)} 
+if(!require(plotly)){install.packages("plotly"); require(plotly)} 
+if(!require(shinycssloaders)){install.packages("shinycssloaders"); require(shinycssloaders)} 
+if(!require(plyr)){install.packages("plyr"); require(plyr)} 
+if(!require(shinyWidgets)){install.packages("shinyWidgets"); require(shinyWidgets)} 
+```
+
+# Read our Technical Desciption in the following link. 
+# View our code below.
+https://docs.google.com/a/uw.edu/document/d/1gOuzRaODkoJyqCE7FUwQZqj3UbQ9KmR1fhXqL2XVQ3s/edit?usp=sharing
+
+
+### Downloading and Cleaning the Data
+
+The following code works with files that were too large to upload to Github. After cleaning them, we created CSV's that were of smaller size that we work with for our models.
+
+```{r, eval=FALSE}
+##### Downloading the data (files too big to upload to Github )
+ParcelData <- read_csv("./data/EXTR_Parcel.csv")   
+
+AppraisedVal <- read_csv("./data/EXTR_RPAcct_NoName.csv")
+
+#####This dataset contains parcel info and zip code
+parcel.Info <- ParcelData %>% filter(DistrictName == 'SEATTLE')   
+
+parcel.Info$PIN <- paste(parcel.Info$Major, parcel.Info$Minor, sep="")   
+
+parcel.Info <- parcel.Info %>% select(PIN, CurrentZoning, SqFtLot)  
+
+#####This dataset contains appraised value per parcel
+appraised.info <- AppraisedVal %>% filter(CityState == 'SEATTLE WA') %>% select(AcctNbr, ZipCode, CityState, BillYr, ApprLandVal)   
+colnames(appraised.info)[colnames(appraised.info) == 'AcctNbr'] <- 'id'
+
+##### Downloading parcel data from allof Seattle
+MHADataOne <- read_csv("~/Documents/INFO_370/Final/MHADataOne.csv")   
+
+MHADataTwo <- read_csv("~/Documents/INFO_370/MHADataTwo.csv")   
+
+MHADataThree <- read_csv("~/Documents/INFO_370/Final/MHADataThree.csv")   
+
+MHADataFour <- read_csv("~/Documents/INFO_370/Final/MHADataFour.csv")
+
+##### Selecting Columns that matter to us
+MHADataFour <- MHADataFour %>% select(PIN, SITETYPE, ADDR_FULL, FULLNAME, ZIP5, LOTSQFT, LAT, LON, APPRLNDVAL, APPR_IMPR, ZONING, Existing_Z, MHA_ZONING, MHA_TIER_F)   
+
+MHADataThree <- MHADataThree %>% select(PIN, SITETYPE, ADDR_FULL, FULLNAME, ZIP5, LOTSQFT, LAT, LON, APPRLNDVAL, APPR_IMPR, ZONING, Existing_Z, MHA_ZONING, MHA_TIER_F)   
+
+MHADataTwo <- MHADataTwo %>% select(PIN, SITETYPE, ADDR_FULL, FULLNAME, ZIP5, LOTSQFT, LAT, LON, APPRLNDVAL, APPR_IMPR, ZONING, Existing_Z, MHA_ZONING, MHA_TIER_F)   
+
+MHADataOne <- MHADataOne %>% select(PIN, SITETYPE, ADDR_FULL, FULLNAME, ZIP5, LOTSQFT, LAT, LON, APPRLNDVAL, APPR_IMPR, ZONING, Existing_Z, MHA_ZONING, MHA_TIER_F)
+
+##### Combining data into one large data frame
+total <- merge(MHADataThree,parcel.Info ,by="PIN")   
+
+total2 <- merge(MHADataTwo,parcel.Info ,by="PIN")   
+
+total3 <- merge(MHADataOne,parcel.Info ,by="PIN")   
+
+total4 <- merge(MHADataFour,parcel.Info ,by="PIN")   
+
+
+total.no.years <- rbind(total,total2, total3, total4)   
+
+write.csv(total.no.years, file = "finalDataNoYears.csv")   
+
+total.no.years <- read.csv("finalDataNoYears.csv")
+
+##### Downloading and selecting columns for Appraisal data
+appraisal.data <- read_csv("~/Downloads/EXTR_RealPropApplHist_V.csv")   
+
+appraisal.data <- appraisal.data %>% filter(RollYr == '2013' | RollYr == '2014' | RollYr == '2015' | RollYr == '2016' | RollYr == '2017')   
+
+appraisal.data$PIN <- paste(appraisal.data$Major, appraisal.data$Minor, sep="")   
+
+appraisal.data <- appraisal.data %>% select(PIN, RollYr, LandVal, ImpsVal, UpdateDate)   
+
+appraisal.data <- appraisal.data %>% mutate(TotalVal = as.numeric(LandVal) + as.numeric(ImpsVal))
+
+##### combining all the data into one 
+newTotal <- merge(total,appraisal.data ,by="PIN")   
+
+newTotal2 <- merge(total2,appraisal.data ,by="PIN")   
+
+newTotal3 <- merge(total3,appraisal.data ,by="PIN")   
+
+newTotal4 <- merge(total4,appraisal.data ,by="PIN")
+
+
+##### One dataset with all the data we will be using from 2013 - 2017
+all.data <- rbind(newTotal, newTotal2, newTotal3, newTotal4)   
+
+write.csv(all.data, file = "dataYears13to17.csv")   
+
+all.data <- read.csv('dataYears13to17.csv')
+
+##### Cleaning the data
+all.data <- all.data[!(is.na(all.data$ADDR_FULL)), ]   
+
+all.data <- all.data[!(is.na(all.data$Existing_Z)), ]   
+
+all.data <- all.data[!(is.na(all.data$ZONING)), ]
+
+
+##### Neighborhood Data
+NeighboOne <- read_csv("./data/MHA2part1.csv")   
+
+NeighboTwo <- read_csv("./data/MHA2part2.csv")   
+
+NeighboThree <- read_csv("./data/MHA2part3.csv")   
+
+NeighboFour <- read_csv("./data/MHA2part4.csv")
+
+NeighboOne <- NeighboOne %>% filter(LEVY_JURIS == 'SEATTLE')   
+
+NeighboTwo <- NeighboTwo %>% filter(LEVY_JURIS == 'SEATTLE')   
+
+NeighboThree <- NeighboThree %>% filter(LEVY_JURIS == 'SEATTLE')   
+
+NeighboFour <- NeighboFour %>% filter(LEVY_JURIS == 'SEATTLE')
+
+##### combining and cleaning neighborhood data
+all.neighborhood <- rbind(NeighboOne, NeighboTwo, NeighboThree, NeighboFour)   
+
+all.neighborhood <- all.neighborhood %>% select(PIN, UV_NAME)   
+
+all.neighborhood <- na.omit(all.neighborhood)   
+
+
+##### all the data with neighborhood information included
+neighborhood.all.data <- merge(all.neighborhood, all.data ,by="PIN")   
+
+
+
+##### Data with older amounts of years that we will use to train and test our forecasting model
+appraisal.data <- read_csv("~/Downloads/EXTR_RealPropApplHist_V.csv")   
+
+appraisal.data$PIN <- paste(appraisal.data$Major, appraisal.data$Minor, sep="")   
+
+appraisal.data <- appraisal.data %>% select(PIN, RollYr, LandVal, ImpsVal, UpdateDate)   
+
+appraisal.data$RollYr <- as.numeric(appraisal.data$RollYr)   
+
+old.years <- appraisal.data %>% filter(RollYr == '2000' | RollYr == '2001' | RollYr == '2002' | RollYr == '2003' | RollYr == '2004' |  RollYr == '2005' |  RollYr == '2006' |  RollYr == '2007' |  RollYr == '2008' | RollYr == '2009')       
+
+test.years <- appraisal.data %>% filter(RollYr == '2010' | RollYr == '2011' | RollYr == '2012' | RollYr == '2013' | RollYr == '2014')   
+
+ 
+totalOldYears <- merge(total.no.years,old.years ,by="PIN")   
+
+totalNewYears <- merge(total.no.years, test.years, by="PIN")
+
+```
+
+
+### Creating the CSV Files
+
+The following files we used in our modeling.
+```{r}
+total.no.years <- read.csv("finalDataNoYears.csv")
+all.data <- read.csv('dataYears13to17.csv')
+neighborhood.all.data <- read.csv("neighborhoodAllData.csv")
+totalOldYears <- read_csv("totalOldYears.csv")
+totalNewYears <- read_csv("totalNewYears.csv")
+zoneFar <- read_csv("zoneFar.csv")
+zoneFarTwo <- read_csv("zoneFar.csv")
+colnames(zoneFar)[1] <- "Existing_Z"
+```
+
+### Split data into Residential, Commercial, Mixed Commercial + Residential, and Industrial Zoning
+
+Since there are multiple types of properties in Seattle, we decided to create models that would reflect each type of property based on the zones that they have. 
+```{r}
+residential <- neighborhood.all.data %>% filter (ZONING == 'RSL/TC'| ZONING == 'SM/R-65'| ZONING == 'HR'| ZONING == 'SF 5000' | ZONING == 'LR3 PUD' | ZONING == 'LR3')
+mixedCommercialRes <- neighborhood.all.data %>% filter(ZONING == 'SM-NR 55/75 2.0'| ZONING == 'SM-NR-85'| ZONING == 'MR-RC'| ZONING == 'LR1' | ZONING == 'LR2 RC' | ZONING == 'LR3 RC')
+industrial <- neighborhood.all.data %>% filter(ZONING == 'IC-65'| ZONING == 'IC-45')
+commercial <- neighborhood.all.data %>% filter(ZONING == 'NC3-40'| ZONING == 'NC3P-40' | ZONING == 'NC2P-40' | ZONING == 'NC2P-30' | ZONING == 'NC2-40' | ZONING == 'NC3-65' | ZONING == 'NC3-65' | ZONING == 'NC3P-85 5.75' | ZONING == 'NC3P-65' | ZONING == 'NC1-40' | ZONING == 'NC1-65' | ZONING == 'NC1-30' | ZONING == 'NC3P-85' | ZONING == 'C1-65' | ZONING == 'C2-65'| ZONING == 'C1-40' | ZONING == 'NC2-65' | ZONING == 'NC2P-65' | ZONING == 'NC1P-30' | ZONING == 'NC3-85' | ZONING == 'NC3-125' | ZONING == 'NC2P-65 4.0'| ZONING == 'NC3-65 2.0'| ZONING == 'NC2P-65 3.0' |  ZONING == 'NC3P-85 2.0' | ZONING == 'NC3P-85 2.0' | ZONING == 'NC3P-85 2.0'| ZONING == 'NC3P-65 2.0' | ZONING == 'NC3P-65 4.0' | ZONING == 'NC3-30' | ZONING == 'C2-30'| ZONING == 'NC2-30' | ZONING == 'NC1P-40' | ZONING == 'C2-40'| ZONING == 'NC3P-65 3.0'| ZONING == 'NC3P-85 4.75' | ZONING == 'NC3-85 4.75' | ZONING == 'NC3P-160' | ZONING == 'NC2P-65 0.75' | ZONING == 'C1-30' | ZONING == 'C1-40 0.75')
+
+residential <- join(residential, zoneFar, by="Existing_Z", type="inner")
+residential <- residential[residential$TotalVal<=10000000,]
+mixedCommercialRes <- join(mixedCommercialRes, zoneFar, by="Existing_Z", type="inner")
+industrial <- join(industrial, zoneFar, by="Existing_Z", type="inner")
+commercial <- join(commercial, zoneFar, by="Existing_Z", type="inner")
+
+colnames(zoneFarTwo)[1] <- "ZONING"
+
+```
+
+
+## Creating a model for residential properties
+```{r, results = "hide", message=FALSE, warning = "hide", warning = FALSE}
+split_proportion = 0.8
+outcome <- residential %>% dplyr::select(TotalVal)
+train_ind <- createDataPartition(outcome$TotalVal, p = split_proportion, list = FALSE)
+mha_train <- residential[train_ind,] 
+mha_test <- residential[-train_ind,] 
+
+mha_test_x <- residential %>% dplyr::select(-TotalVal) 
+mha_test_y <- residential %>% dplyr::select(TotalVal)
+
+ctrl <- trainControl(method = "cv", number=5) 
+
+# Train model
+mha_model_lm <- train(TotalVal ~ RollYr + CurrentZoning + LOTSQFT + UV_NAME + FAR, 
+                      data = residential, 
+                      method = "lm", 
+                      trControl=ctrl) 
+
+mha_model_lm$finalModel
+predict_mha_lm <- predict(mha_model_lm, mha_test_x)
+postResample(predict_mha_lm, mha_test_y$TotalVal)
+grid <- mha_test %>% gather_predictions(mha_model_lm)
+residual <- resid(mha_model_lm)
+```
+
+#### Plotting the residuals
+Based on these residuals, we concluded that our model had some limitations, and would not necessarily reflect the most accurate portrayal of predicted appraisal prices.
+```{r}
+plot(resid(mha_model_lm))
+```
+
+
+## Mixed Commercial/Residential Model
+```{r, results = "hide", message=FALSE, warning = "hide", warning = FALSE}
+## MIX COMMERCIAL RES ##
+split_proportion = 0.8
+outcome_MCR <- mixedCommercialRes %>% dplyr::select(TotalVal)
+train_ind_MCR <- createDataPartition(outcome$TotalVal, p = split_proportion, list = FALSE)
+MCR_train <- mixedCommercialRes[train_ind,] 
+MCR_test <- mixedCommercialRes[-train_ind,] 
+
+MCR_test_x <- mixedCommercialRes %>% dplyr::select(-TotalVal) 
+MCR_test_y <- mixedCommercialRes %>% dplyr::select(TotalVal)
+
+ctrl <- trainControl(method = "cv", number=5) 
+
+# Train model
+MCR_model_lm <- train(TotalVal ~ RollYr + CurrentZoning + LOTSQFT + UV_NAME + FAR, 
+                      data = mixedCommercialRes, 
+                      method = "lm", 
+                      trControl=ctrl) 
+
+MCR_model_lm$finalModel
+
+predict_MCR_lm <- predict(MCR_model_lm, MCR_test_x)
+postResample(predict_MCR_lm, MCR_test_y$TotalVal)
+grid_MCR <- MCR_test %>% gather_predictions(MCR_model_lm)
+residual_MCR <- resid(MCR_model_lm)
+```
+
+#### Plotting the residuals
+```{r}
+plot(resid(MCR_model_lm))
+```
+As this was our first introductory data science course, we did not have the capacity to improve our models, but recognize that some tweaking to improve our performance is necessary.
+
+## Industrial Model
+```{r, results = "hide", message=FALSE, warning = "hide", warning = FALSE}
+split_proportion = 0.8
+outcome_indus <- industrial %>% dplyr::select(TotalVal)
+train_ind_indus <- createDataPartition(outcome$TotalVal, p = split_proportion, list = FALSE)
+indus_train <- industrial[train_ind,] 
+indus_test <- industrial[-train_ind,] 
+
+indus_test_x <- industrial %>% dplyr::select(-TotalVal) 
+indus_test_y <- industrial %>% dplyr::select(TotalVal)
+
+ctrl <- trainControl(method = "cv", number=5) 
+
+# Train model
+indus_model_lm <- train(TotalVal ~ RollYr + CurrentZoning + LOTSQFT + UV_NAME + FAR, 
+                        data = industrial, 
+                        method = "lm", 
+                        trControl=ctrl) 
+
+indus_model_lm$finalModel
+
+predict_indus_lm <- predict(indus_model_lm, indus_test_x)
+postResample(predict_indus_lm, indus_test_y$TotalVal)
+grid_indus <- indus_test %>% gather_predictions(indus_model_lm)
+residual_indus <- resid(indus_model_lm)
+```
+
+#### Plotting the residuals
+```{r}
+plot(resid(indus_model_lm))
+```
+
+
+## Commercial Property Model
+```{r, results = "hide", message=FALSE, warning = "hide", warning = FALSE}
+split_proportion = 0.8
+outcome_com <- commercial %>% dplyr::select(TotalVal)
+train_ind_com <- createDataPartition(outcome$TotalVal, p = split_proportion, list = FALSE)
+com_train <- commercial[train_ind,] 
+com_test <- commercial[-train_ind,] 
+
+com_test_x <- commercial %>% dplyr::select(-TotalVal) 
+com_test_y <- commercial %>% dplyr::select(TotalVal)
+
+ctrl <- trainControl(method = "cv", number=5) 
+
+# Train model
+com_model_lm <- train(TotalVal ~ RollYr + CurrentZoning + LOTSQFT + UV_NAME + FAR, 
+                      data = commercial, 
+                      method = "lm", 
+                      trControl=ctrl) 
+
+com_model_lm$finalModel
+
+predict_com_lm <- predict(com_model_lm, com_test_x)
+postResample(predict_com_lm, com_test_y$TotalVal)
+grid_com <- com_test %>% gather_predictions(com_model_lm)
+residual_com <- resid(com_model_lm)
+```
+
+```{r}
+# residuals 
+plot(resid(com_model_lm))
+```
+
+# Testing Validity of Model
+We conducted training the predictive model with past data (2000-2010) and testing it with new data (2013-2017) to determine if our model had any validity when predicting new unseen years, as our goal was to forecast the future
+
+The data that we used was too large to push up to Github, but the code can be viewed below. From our residual plot and qqnorm plot, our model did not perform very well.
+
+```{r eval=FALSE}
+oldYears <- old.years 
+newYears <- test.years
+
+na.omit(oldYears)
+na.omit(newYears)
+
+newYears_test <- newYears
+newYears_test_x <- newYears %>% dplyr::select(-TotalVal) 
+newYears_test_y <- newYears %>% dplyr::select(TotalVal)
+
+ctrl <- trainControl(method = "cv", number=5) 
+
+oldYears_model_lm <- train(TotalVal ~ RollYr + CurrentZoning + LOTSQFT, 
+                           data = oldYears, 
+                           method = "lm", 
+                           trControl=ctrl) 
+
+oldYears_model_lm$finalModel
+
+predict_newYears_lm <- predict(oldYears_model_lm, newYears_test_x)
+
+postResample(predict_newYears_lm, newYears_test_y$TotalVal)
+grid <- newYears_test %>% gather_predictions(oldYears_model_lm)
+varImp(oldYears_model_lm)
+
+ggplot(newYears_test, aes(RollYr, TotalVal, color = 'red')) +  geom_point() + geom_line(data = grid, aes(y = pred ))
+resid(oldYears_model_lm) 
+plot(resid(oldYears_model_lm)) #A density plot
+qqnorm(resid(oldYears_model_lm)) # A quantile normal plot - good for checking normality
+```
+
+## Predicting Residential Appraisal Values in 2018
+
+#### With the Rezone
+```{r eval=FALSE}
+reZonePrediction <- function() {
+  residentialfuture <- residential %>% filter(RollYr == '2017')
+  residential2017 <-residential %>% filter(RollYr == '2017')
+  residentialfuture$RollYr <- 2018
+  residentialfuture$MHA_ZONING <- gsub("M1", "", residentialfuture$MHA_ZONING)
+  residentialfuture$MHA_ZONING <- gsub("[(M)]", "", residentialfuture$MHA_ZONING)
+  residentialfuture$MHA_ZONING <- gsub("[()]", "", residentialfuture$MHA_ZONING)
+  
+  residentialfuture$ZONING <- residentialfuture$MHA_ZONING 
+  
+  totalfuture <- rbind(residentialfuture, residential)
+  mha_test_x <- totalfuture %>% dplyr::select(-TotalVal) 
+  mha_test_y <- totalfuture %>% dplyr::select(TotalVal)
+  
+  predict_mha_lm <- predict(mha_model_lm, mha_test_x)
+  postResample(predict_mha_lm, mha_test_y$TotalVal)
+  grid <- totalfuture %>% gather_predictions(mha_model_lm)
+  return(grid)
+}
+```
+
+#### Without the Rezone
+```{r eval=FALSE}
+noRezonePredictionRes <- function() {
+  residentialNoZone <- residential %>% filter(RollYr == '2017')
+  residentialNoZone$RollYr <- 2018
+  residentialNoZone$MHA_ZONING <- gsub("M1", "", residentialNoZone$MHA_ZONING)
+  residentialNoZone$MHA_ZONING <- gsub("[(M)]", "", residentialNoZone$MHA_ZONING)
+  residentialNoZone$MHA_ZONING <- gsub("[()]", "", residentialNoZone$MHA_ZONING)  
+  
+  mha_test_xResNoZone <- residentialNoZone %>% dplyr::select(-TotalVal) 
+  mha_test_yResNoZone <- residentialNoZone %>% dplyr::select(TotalVal)
+  
+  predict_mha_lmResNoZone <- predict(mha_model_lm, mha_test_xResNoZone)
+  postResample(predict_mha_lmResNoZone, mha_test_yResNoZone$TotalVal)
+  gridResNoZone <- residentialNoZone %>% gather_predictions(mha_model_lm)
+  
+  gridResNoZone$TotalVal <- gridResNoZone$pred
+  gridResNoZone <- gridResNoZone[,2:25]
+  totalResNoZone <- rbind(gridResNoZone, residential)
+  return(totalResNoZone)
+}
+```
+
+## Mixed Commercial and Residential Predictions
+
+#### With the Rezone
+```{r eval=FALSE}
+mixedRezone <- function() {
+  mixRezone <-mixedCommercialRes %>% filter(RollYr == '2017')
+  mixRezone$RollYr <- 2018
+  mixRezone$MHA_ZONING <- gsub("M1", "", mixRezone$MHA_ZONING)
+  mixRezone$MHA_ZONING <- gsub("[(M)]", "", mixRezone$MHA_ZONING)
+  mixRezone$MHA_ZONING <- gsub("[()]", "", mixRezone$MHA_ZONING)
+  
+  mixRezone$Existing_Z <- mixRezone$MHA_ZONING 
+  mha_test_xRezone <- mixRezone %>% dplyr::select(-TotalVal) 
+  mha_test_yRezone <- mixRezone %>% dplyr::select(TotalVal)
+  
+  predict_mha_lmRezone <- predict(MCR_model_lm, mha_test_xRezone)
+  postResample(predict_mha_lmRezone, mha_test_yRezone$TotalVal)
+  gridRezone <- mixRezone %>% gather_predictions(MCR_model_lm)
+  
+  gridRezone$TotalVal <- gridRezone$pred
+  gridRezone <- gridRezone[,2:25]
+  totalMixRezone <- rbind(gridRezone, mixedCommercialRes)
+  return(totalMixRezone)
+}
+```
+
+#### Without the Rezone
+```{r eval=FALSE}
+mixedNoRezone <- function() {
+  mixNoZone <- mixedCommercialRes %>% filter(RollYr == '2017')
+  mixNoZone$RollYr <- 2018
+  mixNoZone$MHA_ZONING <- gsub("M1", "", mixNoZone$MHA_ZONING)
+  mixNoZone$MHA_ZONING <- gsub("[(M)]", "", mixNoZone$MHA_ZONING)
+  mixNoZone$MHA_ZONING <- gsub("[()]", "", mixNoZone$MHA_ZONING)  
+  
+  mha_test_xMixNoZone <- mixNoZone %>% dplyr::select(-TotalVal) 
+  mha_test_yMixNoZone <- mixNoZone %>% dplyr::select(TotalVal)
+  
+  predict_mha_lmMixNoZone <- predict(MCR_model_lm, mha_test_xMixNoZone)
+  postResample(predict_mha_lmMixNoZone, mha_test_yMixNoZone$TotalVal)
+  gridMixNoZone <- mixNoZone %>% gather_predictions(MCR_model_lm)
+  
+  gridMixNoZone$TotalVal <- gridMixNoZone$pred
+  gridMixNoZoned <- gridMixNoZone[,2:25]
+  totalMixNoZone <- rbind(gridMixNoZoned, mixedCommercialRes)
+  return(totalMixNoZone)
+}
+```
+## Commercial Predictions
+
+#### With the Rezone
+```{r eval=FALSE}
+commercialRezone <- function() {
+  comRezone <-commercial %>% filter(RollYr == '2017')
+  comRezone$RollYr <- 2018
+  comRezone$MHA_ZONING <- gsub("M1", "", comRezone$MHA_ZONING)
+  comRezone$MHA_ZONING <- gsub("[(M)]", "", comRezone$MHA_ZONING)
+  comRezone$MHA_ZONING <- gsub("[()]", "", comRezone$MHA_ZONING)
+  
+  comRezone$ZONING <- comRezone$MHA_ZONING 
+  mha_test_xComRezone <- comRezone %>% dplyr::select(-TotalVal) 
+  mha_test_ComRezone <- comRezone %>% dplyr::select(TotalVal)
+  
+  predict_mha_lmComRezone <- predict(com_model_lm, mha_test_xComRezone)
+  postResample(predict_mha_lmComRezone, mha_test_ComRezone$TotalVal)
+  gridComRezone <- comRezone %>% gather_predictions(com_model_lm)
+  
+  gridComRezone$TotalVal <- gridComRezone$pred
+  gridComRezone <- gridComRezone[,2:25]
+  totalComRezone <- rbind(gridComRezone, commercial)
+  return(totalComRezone)
+}
+```
+#### Without the Rezone
+```{r eval=FALSE}
+commercialNoRezone <- function() {
+  commercialNoZone <- commercial %>% filter(RollYr == '2017')
+  commercialNoZone$RollYr <- 2018
+  commercialNoZone$MHA_ZONING <- gsub("M1", "", commercialNoZone$MHA_ZONING)
+  commercialNoZone$MHA_ZONING <- gsub("[(M)]", "", commercialNoZone$MHA_ZONING)
+  commercialNoZone$MHA_ZONING <- gsub("[()]", "", commercialNoZone$MHA_ZONING)  
+  
+  mha_test_xComNoZone <- commercialNoZone %>% dplyr::select(-TotalVal) 
+  mha_test_yComNoZone <- commercialNoZone %>% dplyr::select(TotalVal)
+  
+  predict_mha_lmComNoZone <- predict(com_model_lm, mha_test_xComNoZone)
+  postResample(predict_mha_lmComNoZone, mha_test_yComNoZone$TotalVal)
+  gridComNoZone <- commercialNoZone %>% gather_predictions(com_model_lm)
+  
+  gridComNoZone$TotalVal <- gridComNoZone$pred
+  gridComNoZoned <- gridComNoZone[,2:25]
+  totalComNoZone <- rbind(gridComNoZoned, commercial)
+  return(totalComNoZone)
+}
+```
+## Industrial Predictions
+
+#### With the Rezone
+```{r eval=FALSE}
+industrialRezone <- function() {
+  indRezone <-industrial %>% filter(RollYr == '2017')
+  indRezone$RollYr <- 2018
+  indRezone$MHA_ZONING <- gsub("M1", "", indRezone$MHA_ZONING)
+  indRezone$MHA_ZONING <- gsub("[(M)]", "", indRezone$MHA_ZONING)
+  indRezone$MHA_ZONING <- gsub("[()]", "", indRezone$MHA_ZONING)
+  
+  indRezone$ZONING <- indRezone$MHA_ZONING 
+  mha_test_xIndRezone <- indRezone %>% dplyr::select(-TotalVal) 
+  mha_test_yIndRezone <- indRezone %>% dplyr::select(TotalVal)
+  
+  predict_mha_lmIndRezone <- predict(indus_model_lm, mha_test_xIndRezone)
+  postResample(predict_mha_lmIndRezone, mha_test_yIndRezone$TotalVal)
+  gridIndRezone <- indRezone %>% gather_predictions(indus_model_lm)
+  
+  gridIndRezone$TotalVal <- gridIndRezone$pred
+  gridIndRezone <- gridIndRezone[,2:25]
+  totalIndRezone <- rbind(gridIndRezone, industrial)
+  return(totalIndRezone)
+}
+
+```
+#### Without the Rezone
+```{r eval=FALSE}
+industrialNoRezone <- function() {
+  industrialNoZone <- industrial %>% filter(RollYr == '2017')
+  industrialNoZone$RollYr <- 2018
+  industrialNoZone$MHA_ZONING <- gsub("M1", "", industrialNoZone$MHA_ZONING)
+  industrialNoZone$MHA_ZONING <- gsub("[(M)]", "", industrialNoZone$MHA_ZONING)
+  industrialNoZone$MHA_ZONING <- gsub("[()]", "", industrialNoZone$MHA_ZONING)  
+  
+  mha_test_xIndNoZone <- industrialNoZone %>% dplyr::select(-TotalVal) 
+  mha_test_yIndNoZone <- industrialNoZone %>% dplyr::select(TotalVal)
+  
+  predict_mha_lmIndNoZone <- predict(indus_model_lm, mha_test_xIndNoZone)
+  postResample(predict_mha_lmIndNoZone, mha_test_yIndNoZone$TotalVal)
+  gridIndNoZone <- industrialNoZone %>% gather_predictions(indus_model_lm)
+  
+  gridIndNoZone$TotalVal <- gridIndNoZone$pred
+  gridIndNoZone <- gridIndNoZone[,2:25]
+  totalIndNoZone <- rbind(gridIndNoZone, industrial)
+  return(totalIndNoZone)
+}
+```
+
+## Predicting Neighborhood Prices Until 2022
+For this portion, we did not use the model we created. Instead, we utilized a forecasting library called Prophet.
+```{r eval=FALSE}
+HomePrices <- read_csv("Neighborhood_Zhvi_AllHomes.csv")
+all.homes <- HomePrices %>% filter(City == 'Seattle')
+
+PredictNeighborhoodSalePrice <- function(neighborhood) {
+  data <- all.homes %>% filter(RegionName == neighborhood)
+  getCol <- data[,8:266]
+  names <- colnames(getCol)
+  prices <- as.numeric(getCol[1,])
+  newdata <- data.frame(names,prices)
+  colnames(newdata) <- c("ds", "y")
+  newdata$ds <- as.Date(paste(newdata$ds,"-01",sep=""))
+  
+  model <- prophet(newdata)
+  future <- make_future_dataframe(model, periods = 60, freq = "month")
+  forecast <- predict(model, future) %>% select(ds, yhat) 
+  forecast$ds <- as.Date(forecast$ds)
+  
+  join.data <- left_join(forecast, newdata, by = "ds")
+  colnames(join.data) <- c("Date", "Predicted", "Actual")
+  return(join.data)
+}
+```
+
+## Predicting Single Address Value in 2018
+```{r eval=FALSE}
+PredictAddressSalePrice <- function(address) {
+address <- toupper(address)
+data <- neighborhood.all.data %>% filter(ADDR_FULL == address)
+if (data$ZONING == 'RSL/TC'| data$ZONING == 'SM/R-65'| data$ZONING == 'HR'| data$ZONING == 'SF 5000' | data$ZONING == 'LR3 PUD' | data$ZONING == 'LR3' ) {
+model <- mha_model_lm
+} else if (data$ZONING == 'SM-NR 55/75 2.0'| data$ZONING == 'SM-NR-85'| data$ZONING == 'MR-RC'| data$ZONING == 'LR1' | data$ZONING == 'LR2 RC' | data$ZONING == 'LR3 RC') {
+model <- MCR_model_lm
+} elseif (data$ZONING == 'IC-65'| data$ZONING == 'IC-45'){
+model <- indus_model_lm
+} else if (data$ZONING == 'NC3-40'| data$ZONING == 'NC3P-40' | data$ZONING == 'NC2P-40' | data$ZONING == 'NC2P-30' | data$ZONING == 'NC2-40' | data$ZONING == 'NC3-65'
+| data$ZONING == 'NC3-65' | data$ZONING == 'NC3P-85 5.75' | data$ZONING == 'NC3P-65' | data$ZONING == 'NC1-40' | data$ZONING == 'NC1-65' | data$ZONING == 'NC1-30' |
+data$ZONING == 'NC3P-85' | data$ZONING == 'C1-65' | data$ZONING == 'C2-65'| data$ZONING == 'C1-40' | data$ZONING == 'NC2-65' | data$ZONING == 'NC2P-65' | data$ZONING == 'NC1P-30' 
+| data$ZONING == 'NC3-85' | data$ZONING == 'NC3-125' | data$ZONING == 'NC2P-65 4.0'| data$ZONING == 'NC3-65 2.0'| data$ZONING == 'NC2P-65 3.0' |data$ZONING == 'NC3P-85 2.0' 
+| data$ZONING == 'NC3P-85 2.0' | data$ZONING == 'NC3P-85 2.0'| data$ZONING == 'NC3P-65 2.0' | data$ZONING == 'NC3P-65 4.0' | data$ZONING == 'NC3-30' | data$ZONING == 'C2-30'
+| data$ZONING == 'NC2-30' | data$ZONING == 'NC1P-40' | data$ZONING == 'C2-40'| data$ZONING == 'NC3P-65 3.0'| data$ZONING == 'NC3P-85 4.75' | data$ZONING == 'NC3-85 4.75' 
+| data$ZONING == 'NC3P-160' | data$ZONING == 'NC2P-65 0.75' | data$ZONING == 'C1-30' | data$ZONING == 'C1-40 0.75'){
+model <- com_model_lm
+}
+
+data <- data %>% filter(ADDR_FULL == address)
+data <- join(data, zoneFar, by="Existing_Z", type="inner")  
+yr2017 <- data %>% filter(RollYr == '2017')
+yr2017$RollYr <- 2018
+yr2017$ZONING <- yr2017$MHA_ZONING 
+future <- rbind(data, yr2017)
+future$ZONING <- gsub("M1", "", future$ZONING)
+future$ZONING <- gsub("[(M)]", "", future$ZONING)
+future$ZONING <- gsub("[()]", "", future$ZONING)
+
+mha_test_x <- future %>% dplyr::select(-TotalVal) 
+mha_test_y <- future %>% dplyr::select(TotalVal)
+
+predict_mha_lm <- predict(model, mha_test_x)
+postResample(predict_mha_lm, mha_test_y$TotalVal)
+grid <- future %>% gather_predictions(model)
+grid$RollYr <- as.numeric(grid$RollYr)
+return(grid)
+}
+
+```

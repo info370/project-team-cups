@@ -1,0 +1,12 @@
+name: project-team
+title: project-team-cups
+username:
+account: joycieyu
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 247477
+bundleId: 1129280
+url: https://joycieyu.shinyapps.io/project-team/
+when: 1513051064.11138
+asMultiple: FALSE
+asStatic: FALSE

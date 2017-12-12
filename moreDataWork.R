@@ -17,7 +17,6 @@ total.no.years <- read.csv("./data/finalDataNoYears.csv")
 all.data <- read.csv('./data/dataYears13to17.csv')
 neighborhood.all.data <- read.csv("./data/neighborhoodAllData.csv")
 zoneFar <- read_csv("./data/zoneFar.csv")
-zoneFarTwo <- read_csv("./data/zoneFar.csv")
 colnames(zoneFar)[1] <- "Existing_Z"
 
 ##### SPLIT DATA INTO RESIDENTIAL AND COMMERCIAL ####
@@ -33,8 +32,6 @@ residential <- residential[residential$TotalVal<=10000000,]
 mixedCommercialRes <- join(mixedCommercialRes, zoneFar, by="Existing_Z", type="inner")
 industrial <- join(industrial, zoneFar, by="Existing_Z", type="inner")
 commercial <- join(commercial, zoneFar, by="Existing_Z", type="inner")
-
-colnames(zoneFarTwo)[1] <- "ZONING"
 
 
 ## RESIDENTIAL MODEL ###
