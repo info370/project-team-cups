@@ -16,7 +16,7 @@ if(!require(shinyWidgets)){install.packages("shinyWidgets"); require(shinyWidget
 total.no.years <- read.csv("./data/finalDataNoYears.csv")
 all.data <- read.csv('./data/dataYears13to17.csv')
 neighborhood.all.data <- read.csv("./data/neighborhoodAllData.csv")
-zoneFar <- read_csv("./data/zoneFar.csv")
+zoneFar <- read_csv("./data/zoneFAR.csv")
 colnames(zoneFar)[1] <- "Existing_Z"
 
 ##### SPLIT DATA INTO RESIDENTIAL AND COMMERCIAL ####
